@@ -12,39 +12,86 @@ client.on('ready', () => {
 
 client.initialize();
 
-// Variável de estado para rastrear a etapa atual
+// Variáveis de estado para rastrear a etapa atual, o atendimento do usuário e o estado da aplicação
 const userState = {};
+const userInAtendimento = {};
+let isPaused = false;
 
 client.on('message', async (message) => {
-    if (message.body) {
+    if (message.body && !message.isGroupMsg) {
         const phone = message.from;
-        if (!userState[phone]) {
+        if (userInAtendimento[phone]) {
+            // Atendimento em andamento pelo atendente
+            if (message.body.includes('Obrigado pelo contato, estamos à disposição')) {
+                // O atendente encerrou a conversa
+                userInAtendimento[phone] = false;
+                isPaused = false; // Definir isPaused como false para retomar a aplicação
+                userState[phone] = undefined;
+                await sendWelcomeMessage(message);
+                return;
+            } else {
+                // Atendimento em andamento, encaminhar mensagem para o atendente
+                // ...
+                return;
+            }
+        } else if (!userState[phone]) {
             // Primeira mensagem do usuário, fornecer as opções
             userState[phone] = 'waitingForOption';
-            await sendOptionsMessage(message);
+            await sendWelcomeMessage(message);
+        } else if (isPaused) {
+            // Aplicação pausada aguardando atendente
+            await client.sendMessage(phone, 'Aguarde um momento, estamos transferindo você para um atendente.');
         } else {
-            const selectedOption = message.body;
+            const escolhaOpcao = message.body;
             let response;
-            if (selectedOption === '1') {
-                response = 'Se você trouxe seu aparelho para um orçamento deixe seu nome e retornaremos em breve. 😉';
-                delete userState[phone]; // Reiniciar o código
-            } else if (selectedOption === '2') {
-                response = 'IPTV teste grátis por 6 horas e mensalidade de R$30, indicando dois amigos você ganha um mês grátis. 😃';
-                delete userState[phone]; // Reiniciar o código
-            } else if (selectedOption === '3') {
-                response = 'Estamos localizados na Av Lucia Helena Gonçalves Viana, 916. 📍';
-                delete userState[phone]; // Reiniciar o código
-            } else if (selectedOption === '4') {
-                response = 'Temos os seguintes aparelhos a pronta entrega: [...]. 👍';
-                delete userState[phone]; // Reiniciar o código
-            } else if (selectedOption === '5') {
-                response = 'Deixe seu nome completo e CPF que lhe enviaremos o comprovante de garantia. 📄';
-                delete userState[phone]; // Reiniciar o código
-            } else {
-                // Opção inválida
-                response = 'Opção inválida. Por favor, escolha uma das opções válidas. 😕';
-                await message.reply(response);
-                return await sendOptionsMessage(message);
+            if (userState[phone] === 'waitingForOption') {
+                if (escolhaOpcao === '1') {
+                    response = 'Se você trouxe seu aparelho para um orçamento deixe seu nome e retornaremos em breve. 😉';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '2') {
+                    userState[phone] = 'iptvSubMenu';
+                    response = 'Escolha uma das opções do submenu IPTV:\n' +
+                        '1️⃣ Instalação\n' +
+                        '2️⃣ Configuração\n' +
+                        '3️⃣ Falta de Sinal';
+                } else if (escolhaOpcao === '3') {
+                    response = 'Estamos localizados na Av Lucia Helena Gonçalves Viana, 916. 📍';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '4') {
+                    response = 'Temos os seguintes aparelhos a pronta entrega: [...]. 👍';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '5') {
+                    response = 'Deixe seu nome completo e CPF que lhe enviaremos o comprovante de garantia. 📄';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '6') {
+                    response = 'Aguarde um momento, estamos transferindo você para um atendente.';
+                    // Pausar a aplicação
+                    isPaused = true;
+                    // Encerrar a sessão
+                    client.sendMessage(phone, response);
+                    client.deleteChat(phone);
+                } else {
+                    // Opção inválida
+                    response = 'Opção inválida. Por favor, escolha uma das opções válidas. 😕';
+                    await message.reply(response);
+                    return await sendWelcomeMessage(message);
+                }
+            } else if (userState[phone] === 'iptvSubMenu') {
+                if (escolhaOpcao === '1') {
+                    response = 'Passo a Passo para sua Instalação: [.....]';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '2') {
+                    response = 'Passo a Passo para configurar seu IPTV: [.....]';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else if (escolhaOpcao === '3') {
+                    response = 'Sua mensagem foi registrada, entraremos em contato em breve.';
+                    userState[phone] = undefined; // Reiniciar o código
+                } else {
+                    // Opção inválida
+                    response = 'Opção inválida. Por favor, escolha uma das opções válidas do submenu IPTV. 😕';
+                    await message.reply(response);
+                    return await sendWelcomeMessage(message);
+                }
             }
 
             await message.reply(response);
@@ -52,14 +99,15 @@ client.on('message', async (message) => {
     }
 });
 
-async function sendOptionsMessage(message) {
-    const optionsMessage = await message.reply(
-        'Opção inválida. Por favor, escolha uma das opções válidas. 😕\n' +
+async function sendWelcomeMessage(message) {
+    const welcomeMessage = 'Brothers eletrônica agradece seu contato, em que posso ajudar? 😉\n' +
         '1️⃣ ORÇAMENTO\n' +
         '2️⃣ IPTV\n' +
         '3️⃣ ENDEREÇO\n' +
         '4️⃣ COMPRA\n' +
-        '5️⃣ GARANTIA'
-    );
+        '5️⃣ GARANTIA\n' +
+        '6️⃣ FALAR COM ATENDENTE';
+
+    const optionsMessage = await message.reply(welcomeMessage);
     console.log('Mensagem enviada com opções:', optionsMessage.body);
 }
