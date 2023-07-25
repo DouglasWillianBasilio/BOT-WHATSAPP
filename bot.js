@@ -12,29 +12,14 @@ client.on('ready', () => {
 
 client.initialize();
 
-// Variáveis de estado para rastrear a etapa atual, o atendimento do usuário e o estado da aplicação
+// Variáveis de estado para rastrear a etapa atual e o estado da aplicação
 const userState = {};
-const userInAtendimento = {};
 let isPaused = false;
 
 client.on('message', async (message) => {
     if (message.body && !message.isGroupMsg) {
         const phone = message.from;
-        if (userInAtendimento[phone]) {
-            // Atendimento em andamento pelo atendente
-            if (message.body.includes('Obrigado pelo contato, estamos à disposição')) {
-                // O atendente encerrou a conversa
-                userInAtendimento[phone] = false;
-                isPaused = false; // Definir isPaused como false para retomar a aplicação
-                userState[phone] = undefined;
-                await sendWelcomeMessage(message);
-                return;
-            } else {
-                // Atendimento em andamento, encaminhar mensagem para o atendente
-                // ...
-                return;
-            }
-        } else if (!userState[phone]) {
+        if (!userState[phone]) {
             // Primeira mensagem do usuário, fornecer as opções
             userState[phone] = 'waitingForOption';
             await sendWelcomeMessage(message);
@@ -64,12 +49,8 @@ client.on('message', async (message) => {
                     response = 'Deixe seu nome completo e CPF que lhe enviaremos o comprovante de garantia. 📄';
                     userState[phone] = undefined; // Reiniciar o código
                 } else if (escolhaOpcao === '6') {
-                    response = 'Aguarde um momento, estamos transferindo você para um atendente.';
-                    // Pausar a aplicação
-                    isPaused = true;
-                    // Encerrar a sessão
-                    client.sendMessage(phone, response);
-                    client.deleteChat(phone);
+                    // Fornecer um link de redirecionamento para o atendente
+                    response = 'Clique neste link para falar com um atendente: https://wa.me/número_atendente';
                 } else {
                     // Opção inválida
                     response = 'Opção inválida. Por favor, escolha uma das opções válidas. 😕';
