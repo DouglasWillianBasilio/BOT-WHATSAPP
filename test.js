@@ -86,7 +86,7 @@ client.on('message', async (message) => {
                     userState[phone] = undefined; // Reiniciar o código
                 } else if (escolhaOpcao === '6') {
                     // Fornecer um link de redirecionamento para o atendente
-                    response = 'Clique neste link para falar com um atendente: https://wa.me/número_atendente';
+                    response = 'Clique neste link para falar com um atendente: https://wa.me/43 9988-1351';
                     userState[phone] = undefined; // Reiniciar o código
                 } else {
                     // Opção inválida
