@@ -17,21 +17,50 @@ const numeroNotificacao = 'NUMERO_DESTINO'; // Substitua pelo número real
 
 // Variáveis de estado para rastrear a etapa atual e o estado da aplicação
 const userState = {};
+const userMemory = {};
+const chatTimeout = 30 * 60 * 1000; // Tempo limite de 30 minutos em milissegundos
 let isPaused = false;
+let lastInteractionTime = Date.now(); // Armazena o horário da última interação
 
 client.on('message', async (message) => {
     if (message.body && !message.isGroupMsg) {
         const phone = message.from;
+
+        if (!userMemory[phone]) {
+            userMemory[phone] = {};
+        }
+
+        // Atualiza o horário da última interação com o usuário
+        lastInteractionTime = Date.now();
+
+        // Restaura o estado de pausa caso a opção "FALAR COM ATENDENTE" seja escolhida
+        if (userState[phone] === 'waitingForOption' && message.body === '6') {
+            isPaused = true;
+            userState[phone] = undefined;
+            await client.sendMessage(phone, 'Você escolheu falar com um atendente. O chatbot está pausado até que um atendente esteja disponível.');
+            return;
+        }
+
+        // Verifica se o chat ficou mais de 30 minutos sem interações e retorna
+        if (Date.now() - lastInteractionTime >= chatTimeout) {
+            isPaused = false;
+            await client.sendMessage(phone, 'Desculpe, parece que você ficou inativo por muito tempo. O chatbot está disponível novamente. Como posso ajudar?');
+        }
+
+        // Se o chat estiver pausado, retorna sem executar outras ações
+        if (isPaused) {
+            return;
+        }
+
         if (!userState[phone]) {
             // Primeira mensagem do usuário, fornecer as opções
             userState[phone] = 'waitingForOption';
             await sendWelcomeMessage(message);
-        } else if (isPaused) {
-            // Aplicação pausada aguardando atendente
-            await client.sendMessage(phone, 'Aguarde um momento, estamos transferindo você para um atendente.');
         } else {
             const escolhaOpcao = message.body;
             let response;
+
+            // Restante do código do chatbot
             if (userState[phone] === 'waitingForOption') {
                 if (escolhaOpcao === '1') {
                     // Enviar uma mensagem de notificação para o número configurado para a notificação
@@ -68,17 +97,42 @@ client.on('message', async (message) => {
             } else if (userState[phone] === 'iptvSubMenu') {
                 if (escolhaOpcao === '1') {
                     response = 'Passo a Passo para sua Instalação: [.....]';
-                    userState[phone] = undefined; // Reiniciar o código
+
+                    // Armazena informações na "memória" do usuário
+                    userMemory[phone].lastOption = escolhaOpcao;
                 } else if (escolhaOpcao === '2') {
                     response = 'Passo a Passo para configurar seu IPTV: [.....]';
-                    userState[phone] = undefined; // Reiniciar o código
+
+                    // Armazena informações na "memória" do usuário
+                    userMemory[phone].lastOption = escolhaOpcao;
                 } else if (escolhaOpcao === '3') {
                     response = 'Sua mensagem foi registrada, entraremos em contato em breve.';
-                    userState[phone] = undefined; // Reiniciar o código
+
+                    // Armazena informações na "memória" do usuário
+                    userMemory[phone].lastOption = escolhaOpcao;
+                } else if (escolhaOpcao === 'voltar') {
+                    // Exemplo de como utilizar informações armazenadas na "memória" do usuário
+                    const lastOption = userMemory[phone].lastOption;
+
+                    if (lastOption === '1') {
+                        response = 'Você voltou à opção 1 do submenu IPTV.';
+                    } else if (lastOption === '2') {
+                        response = 'Você voltou à opção 2 do submenu IPTV.';
+                    } else if (lastOption === '3') {
+                        response = 'Você voltou à opção 3 do submenu IPTV.';
+                    } else {
+                        response = 'Você não selecionou uma opção anterior no submenu IPTV.';
+                    }
                 } else {
                     // Opção inválida
                     response = 'Opção inválida. Por favor, escolha uma das opções válidas do submenu IPTV. 😕';
                     await message.reply(response);
+
+                    // Exemplo de como retornar à opção anterior
+                    const lastOption = userMemory[phone].lastOption;
+                    if (lastOption) {
+                        return;
+                    }
                     return await sendWelcomeMessage(message);
                 }
             }
@@ -100,3 +154,18 @@ async function sendWelcomeMessage(message) {
     const optionsMessage = await message.reply(welcomeMessage);
     console.log('Mensagem enviada com opções:', optionsMessage.body);
 }
+
+// Função para verificar o tempo limite e retornar se necessário
+async function checkTimeoutAndReturn() {
+    if (!isPaused && Date.now() - lastInteractionTime >= chatTimeout) {
+        isPaused = false;
+        await client.sendMessage(numeroNotificacao, 'Desculpe, parece que o usuário ficou inativo por muito tempo. O chatbot está disponível novamente. Como posso ajudar?');
+    }
+
+    // Agendando a próxima verificação após um intervalo de tempo
+    setTimeout(checkTimeoutAndReturn, chatTimeout);
+}
+
+// Iniciar a verificação do tempo limite
+checkTimeoutAndReturn();
+
